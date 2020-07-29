@@ -1,8 +1,8 @@
 import sc2
-from sc2 import run_game, maps, Race, Difficulty
+from sc2 import run_game, maps, Race, Difficulty, position
 from sc2.player import Bot, Computer
 from sc2.constants import NEXUS, PROBE, PYLON, ASSIMILATOR, STALKER, \
-    CYBERNETICSCORE, GATEWAY, STARGATE, VOIDRAY
+    CYBERNETICSCORE, GATEWAY, STARGATE, VOIDRAY, OBSERVER, ROBOTICSFACILITY
 
 import random
 import cv2
@@ -28,10 +28,39 @@ class SentdeBot(sc2.BotAI):
         await self.intel()
         await self.attack() # 军队攻击
 
+    def random_location_variance(self, enemy_start_location):
+        x = enemy_start_location[0]
+        y = enemy_start_location[1]
+
+        x += ((random.randrange(-20, 20))/100) * enemy_start_location[0]
+        y += ((random.randrange(-20, 20))/100) * enemy_start_location[1]
+
+        if x < 0:
+            x = 0
+        if y < 0:
+            y = 0
+        if x > self.game_info.map_size[0]:
+            x = self.game_info.map_size[0]
+        if y > self.game_info.map_size[1]:
+            y = self.game_info.map_size[1]
+
+        go_to = position.Point2(position.Pointlike((x,y)))
+        return go_to
+
     # 侦察
     async def scout(self):
-        if len(self.sc)
-        
+        if len(self.units(OBSERVER)) > 0:
+            scout = self.units(OBSERVER)[0]
+            if scout.is_idle:
+                enemy_location = self.enemy_start_locations[0]
+                move_to = self.random_location_variance(enemy_location)
+                # print(move_to)
+                await self.do(scout.move(move_to))
+
+        else:
+            for rf in self.units(ROBOTICSFACILITY).ready.idle:
+                if self.can_afford(OBSERVER) and self.supply_left > 0:
+                    await self.do(rf.train(OBSERVER))
 
     async def intel(self):
         # 获得小地图图片，里边标记一些单元或者建筑的位置信息
@@ -53,19 +82,42 @@ class SentdeBot(sc2.BotAI):
                 pos = unit.position
                 cv2.circle(game_data, (int(pos[0]), int(pos[1])), draw_dict[unit_type][0], draw_dict[unit_type][1], -1)
         
-        # 画出敌方单元
+        # 画出敌方建筑
+        main_base_name = ["nexus", "commandcenter", "hatchery"]
+        for enemy_building in self.known_enemy_structures:
+            pos = enemy_building.position
+            if enemy_building.name.lower() not in main_base_name:
+                cv2.circle(game_data, (int(pos[0]), int(pos[1])), 5, (200, 50, 212), -1)
+        
+        for enemy_building in self.known_enemy_structures:
+            pos = enemy_building.position
+            if enemy_building.name.lower() in main_base_name:
+                cv2.circle(game_data, (int(pos[0]), int(pos[1])), 15, (0,0,255), -1)
+
+        # 画出敌方兵力
+        for enemy_unit in self.known_enemy_units:
+            if not enemy_unit.is_structure:
+                worker_name = [
+                    "probe",
+                    "scv",
+                    "drone"
+                ]
+                pos = enemy_unit.position
+                if enemy_unit.name.lower() in worker_name:
+                    cv2.circle(game_data, (int(pos[0]), int(pos[1])), 1, (55, 0, 155), -1)
+                else:
+                    cv2.circle(game_data, (int(pos[0]), int(pos[1])), 3, (55, 0, 215), -1)
+
+        for obs in self.units(OBSERVER).ready:
+            pos = obs.position
+            cv2.circle(game_data, (int(pos[0]), int(pos[1])), 1, (255, 255, 255), -1)
 
         flipped = cv2.flip(game_data, 0)
         resized = cv2.resize(flipped, dsize=None, fx=2, fy=2)
 
         cv2.imshow("Intel", resized)
         cv2.waitKey(1)
-
-
-
-
         
-
     # 生成探针
     async def build_workers(self):
         if (len(self.units(NEXUS))*16) > len(self.units(PROBE)) and len(self.units(PROBE)) < self.MAX_WORKERS:
@@ -111,6 +163,11 @@ class SentdeBot(sc2.BotAI):
             elif len(self.units(GATEWAY)) < 1:
                 if self.can_afford(GATEWAY) and not self.already_pending(GATEWAY):
                     await self.build(GATEWAY, near=pylon)
+
+            if self.units(CYBERNETICSCORE).ready.exists:
+                if len(self.units(ROBOTICSFACILITY)) < 1:
+                    if self.can_afford(ROBOTICSFACILITY) and not self.already_pending(ROBOTICSFACILITY):
+                        await self.build(ROBOTICSFACILITY, near=pylon)
             
             if self.units(CYBERNETICSCORE).ready.exists:
                 if len(self.units(STARGATE)) < ((self.iteration/self.ITERATION_PER_MINUTE)):

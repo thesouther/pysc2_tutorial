@@ -1,0 +1,16 @@
+model Result.Victory
+random Result.Defeat
+random Result.Defeat
+random Result.Defeat
+random Result.Defeat
+Random Result.Defeat
+Random Result.Victory
+random Result.Victory
+random Result.Victory
+model Result.Victory
+random Result.Defeat
+random Result.Defeat
+model Result.Defeat
+random Result.Victory
+random Result.Defeat
+random Result.Defeat
